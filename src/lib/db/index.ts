@@ -1,37 +1,43 @@
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
+import { createClient, type Client } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
 import path from "path";
 import fs from "fs";
 import * as schema from "./schema";
 
 type DrizzleDb = ReturnType<typeof drizzle<typeof schema>>;
 
-// IMPORTANT: this connection must be created lazily, not at module load time.
-// Next.js imports this module tree while building (e.g. to collect page
-// data), which happens in an environment where a host's persistent disk
-// (e.g. Render's /data mount) is not attached yet. Opening the SQLite file
-// as a top-level side effect would crash the build. Everything below only
-// touches the filesystem the first time a query actually runs, at request
-// time, when the real disk is mounted.
-let _sqlite: Database.Database | null = null;
+// IMPORTANT: this connection must be created lazily, not at module load
+// time. Next.js imports this module tree while building (e.g. to collect
+// page data), and touching the database as a top-level side effect can
+// crash the build in hosts that don't have things set up yet at build time.
+// Everything below only runs the first time a query actually executes, at
+// request time.
+let _client: Client | null = null;
 let _db: DrizzleDb | null = null;
 
 function getConnection() {
-  if (_sqlite && _db) return { sqlite: _sqlite, db: _db };
+  if (_client && _db) return { client: _client, db: _db };
 
-  const dbPath =
-    process.env.DATABASE_PATH || path.join(process.cwd(), "data", "app.db");
-  const dir = path.dirname(dbPath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  // Production: point at a free Turso database (no local disk needed, so no
+  // paid persistent disk required on the host). Local dev: falls back to a
+  // plain local file, no Turso account required.
+  const url =
+    process.env.TURSO_DATABASE_URL ||
+    `file:${path.join(process.cwd(), "data", "app.db")}`;
+  const authToken = process.env.TURSO_AUTH_TOKEN;
+
+  if (url.startsWith("file:")) {
+    const filePath = url.slice("file:".length);
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
   }
 
-  _sqlite = new Database(dbPath);
-  _sqlite.pragma("journal_mode = WAL");
-  _sqlite.pragma("foreign_keys = ON");
-  _db = drizzle(_sqlite, { schema });
+  _client = createClient(authToken ? { url, authToken } : { url });
+  _db = drizzle(_client, { schema });
 
-  return { sqlite: _sqlite, db: _db };
+  return { client: _client, db: _db };
 }
 
 function lazyProxy<T extends object>(pick: () => T): T {
@@ -45,6 +51,4 @@ function lazyProxy<T extends object>(pick: () => T): T {
 }
 
 export const db: DrizzleDb = lazyProxy(() => getConnection().db);
-export const sqlite: Database.Database = lazyProxy(
-  () => getConnection().sqlite
-);
+export const client: Client = lazyProxy(() => getConnection().client);

@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { db, sqlite } from "./index";
+import { db, client } from "./index";
 import { users } from "./schema";
 import { eq } from "drizzle-orm";
 
@@ -15,7 +15,7 @@ async function seed() {
 
   if (existing.length > 0) {
     console.log(`Admin user ${adminEmail} already exists. Skipping.`);
-    sqlite.close();
+    client.close();
     return;
   }
 
@@ -32,7 +32,7 @@ async function seed() {
   console.log(`  Email:    ${adminEmail}`);
   console.log(`  Password: ${adminPassword}`);
   console.log("Please log in and change this password / create real users.");
-  sqlite.close();
+  client.close();
 }
 
 seed().catch((err) => {
