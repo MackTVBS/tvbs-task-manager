@@ -84,10 +84,18 @@ export async function sendTaskAssignedEmail(params: {
   taskDescription: string | null;
   clientName: string;
   dueDate: string;
+  dueTime?: string | null;
   priority: string;
   appUrl: string;
   taskId: number;
+  replyToken?: string | null;
 }) {
+  const replyHint = params.replyToken
+    ? `<p style="background:#f1f5f9; border-radius:6px; padding:10px 12px; font-size:13px; color:#334155;">
+         Tip: you can also just <strong>reply to this email with "Completed"</strong> once you're done — no need to log in.
+       </p>`
+    : "";
+
   const html = wrapEmail(
     "New task assigned to you",
     `
@@ -108,18 +116,25 @@ export async function sendTaskAssignedEmail(params: {
         }
         <tr><td style="padding:6px 0; color:#6b7280;">Due date</td><td style="padding:6px 0;">${escapeHtml(
           params.dueDate
-        )}</td></tr>
+        )}${
+      params.dueTime
+        ? ` at ${escapeHtml(formatTime12h(params.dueTime))}`
+        : ""
+    }</td></tr>
         <tr><td style="padding:6px 0; color:#6b7280;">Priority</td><td style="padding:6px 0;">${escapeHtml(
           params.priority
         )}</td></tr>
       </table>
       <p><a href="${params.appUrl}/tasks/${params.taskId}" style="background:#0f172a; color:#fff; padding:10px 16px; border-radius:6px; text-decoration:none; display:inline-block;">View task</a></p>
+      ${replyHint}
     `
   );
 
+  const subjectSuffix = params.replyToken ? ` [REF-${params.replyToken}]` : "";
+
   return sendMail({
     to: params.to,
-    subject: `New task assigned: ${params.taskTitle} (${params.clientName})`,
+    subject: `New task assigned: ${params.taskTitle} (${params.clientName})${subjectSuffix}`,
     html,
   });
 }
@@ -196,6 +211,16 @@ export async function sendWelcomeEmail(params: {
     subject: "Your TVBS Task Manager account",
     html,
   });
+}
+
+function formatTime12h(hhmm: string) {
+  const [hStr, mStr] = hhmm.split(":");
+  const h = Number(hStr);
+  const m = Number(mStr);
+  if (Number.isNaN(h) || Number.isNaN(m)) return hhmm;
+  const period = h >= 12 ? "PM" : "AM";
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}:${String(m).padStart(2, "0")} ${period}`;
 }
 
 function escapeHtml(str: string) {

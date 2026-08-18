@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/auth/session";
 import { listTasks } from "@/lib/db/queries";
 import StatusSelect from "@/components/StatusSelect";
 import PriorityBadge from "@/components/PriorityBadge";
-import { todayInTz } from "@/lib/date";
+import { todayInTz, timeProgressPercent } from "@/lib/date";
 import { redirect } from "next/navigation";
 
 function dueBadge(dueDate: string, status: string, today: string) {
@@ -146,7 +146,10 @@ export default async function DashboardPage(
                   </td>
                   <td className="px-4 py-3 text-slate-600">
                     <div className="flex items-center gap-2">
-                      <span>{task.dueDate}</span>
+                      <span>
+                        {task.dueDate}
+                        {task.dueTime ? ` · ${task.dueTime}` : ""}
+                      </span>
                       {dueBadge(task.dueDate, task.status, today)}
                     </div>
                   </td>
@@ -155,7 +158,15 @@ export default async function DashboardPage(
                   </td>
                   <td className="px-4 py-3">
                     {user.role === "ADMIN" || task.assigneeId === user.id ? (
-                      <StatusSelect taskId={task.id} status={task.status} />
+                      <StatusSelect
+                        taskId={task.id}
+                        status={task.status}
+                        progressPercent={timeProgressPercent(
+                          task.createdAt,
+                          task.dueDate,
+                          task.dueTime
+                        )}
+                      />
                     ) : (
                       <span className="text-xs text-slate-500">
                         {task.status.replace("_", " ")}

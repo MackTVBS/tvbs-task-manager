@@ -22,6 +22,11 @@ export default function Nav({ session }: { session: SessionPayload }) {
                 Team
               </Link>
             )}
+            {session.role === "ADMIN" && (
+              <Link href="/recurring" className="hover:text-slate-900">
+                Recurring
+              </Link>
+            )}
             <Link href="/account" className="hover:text-slate-900">
               Account
             </Link>

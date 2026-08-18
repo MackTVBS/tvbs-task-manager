@@ -8,6 +8,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getTaskById } from "@/lib/db/queries";
 import { sendTaskAssignedEmail } from "@/lib/mail";
+import { generateReplyToken } from "@/lib/tokens";
+import { todayInTz } from "@/lib/date";
 
 function getAppUrl() {
   return process.env.APP_URL || "http://localhost:3000";
@@ -27,6 +29,8 @@ export async function createTaskAction(
   const clientId = Number(formData.get("clientId"));
   const assigneeId = Number(formData.get("assigneeId"));
   const dueDate = String(formData.get("dueDate") || "");
+  const dueTimeRaw = String(formData.get("dueTime") || "").trim();
+  const dueTime = /^\d{2}:\d{2}$/.test(dueTimeRaw) ? dueTimeRaw : null;
   const priority = String(formData.get("priority") || "MEDIUM") as
     | "LOW"
     | "MEDIUM"
@@ -35,6 +39,8 @@ export async function createTaskAction(
   if (!title || !clientId || !assigneeId || !dueDate) {
     return { error: "Please fill in all required fields." };
   }
+
+  const replyToken = generateReplyToken();
 
   const [inserted] = await db
     .insert(tasks)
@@ -45,8 +51,10 @@ export async function createTaskAction(
       assigneeId,
       createdById: admin.id,
       dueDate,
+      dueTime,
       priority,
       status: "PENDING",
+      replyToken,
     })
     .returning({ id: tasks.id });
 
@@ -59,13 +67,23 @@ export async function createTaskAction(
       taskDescription: task.description,
       clientName: task.clientName,
       dueDate: task.dueDate,
+      dueTime: task.dueTime,
       priority: task.priority,
       appUrl: getAppUrl(),
       taskId: task.id,
+      replyToken,
     });
+    const now = new Date().toISOString();
     await db
       .update(tasks)
-      .set({ assignEmailSentAt: result.sent ? new Date().toISOString() : null })
+      .set({
+        assignEmailSentAt: result.sent ? now : null,
+        // If it's due today, this assignment email already told the
+        // assignee — don't also fire a "due today" reminder minutes later.
+        ...(result.sent && dueDate === todayInTz(0)
+          ? { reminderEmailSentAt: now }
+          : {}),
+      })
       .where(eq(tasks.id, task.id));
   }
 
@@ -133,6 +151,8 @@ export async function updateTaskAction(
   const clientId = Number(formData.get("clientId"));
   const assigneeId = Number(formData.get("assigneeId"));
   const dueDate = String(formData.get("dueDate") || "");
+  const dueTimeRaw = String(formData.get("dueTime") || "").trim();
+  const dueTime = /^\d{2}:\d{2}$/.test(dueTimeRaw) ? dueTimeRaw : null;
   const priority = String(formData.get("priority") || "MEDIUM") as
     | "LOW"
     | "MEDIUM"
@@ -153,6 +173,7 @@ export async function updateTaskAction(
       clientId,
       assigneeId,
       dueDate,
+      dueTime,
       priority,
       updatedAt: new Date().toISOString(),
       // Reset reminder tracking if the due date moved, so reminders re-fire correctly.
@@ -170,6 +191,7 @@ export async function updateTaskAction(
         taskDescription: updated.description,
         clientName: updated.clientName,
         dueDate: updated.dueDate,
+        dueTime: updated.dueTime,
         priority: updated.priority,
         appUrl: getAppUrl(),
         taskId: updated.id,

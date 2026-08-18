@@ -1,0 +1,1 @@
+ALTER TABLE `recurring_tasks` ADD `due_time` text;

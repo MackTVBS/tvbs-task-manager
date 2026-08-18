@@ -6,6 +6,7 @@ import StatusSelect from "@/components/StatusSelect";
 import PriorityBadge from "@/components/PriorityBadge";
 import TaskForm from "@/components/TaskForm";
 import { updateTaskAction, deleteTaskAction } from "@/lib/tasks/actions";
+import { timeProgressPercent } from "@/lib/date";
 
 export default async function TaskDetailPage(
   props: PageProps<"/tasks/[id]">
@@ -22,6 +23,11 @@ export default async function TaskDetailPage(
 
   const canManage = user.role === "ADMIN";
   const canUpdateStatus = canManage || task.assigneeId === user.id;
+  const progressPercent = timeProgressPercent(
+    task.createdAt,
+    task.dueDate,
+    task.dueTime
+  );
 
   if (canManage) {
     const [clients, members] = await Promise.all([
@@ -59,12 +65,17 @@ export default async function TaskDetailPage(
             clientId: task.clientId,
             assigneeId: task.assigneeId || undefined,
             dueDate: task.dueDate,
+            dueTime: task.dueTime || "",
             priority: task.priority,
           }}
         />
 
         <div className="mt-6 flex items-center justify-between">
-          <StatusSelect taskId={task.id} status={task.status} />
+          <StatusSelect
+            taskId={task.id}
+            status={task.status}
+            progressPercent={progressPercent}
+          />
           <form action={deleteTaskAction}>
             <input type="hidden" name="taskId" value={task.id} />
             <button
@@ -96,6 +107,7 @@ export default async function TaskDetailPage(
         </h1>
         <p className="text-sm text-slate-500 mb-4">
           For {task.clientName} · Due {task.dueDate}
+          {task.dueTime ? ` at ${task.dueTime}` : ""}
         </p>
         {task.description && (
           <p className="text-sm text-slate-700 whitespace-pre-wrap mb-6">
@@ -108,7 +120,11 @@ export default async function TaskDetailPage(
             <label className="block text-xs font-medium text-slate-500 mb-1">
               Status
             </label>
-            <StatusSelect taskId={task.id} status={task.status} />
+            <StatusSelect
+              taskId={task.id}
+              status={task.status}
+              progressPercent={progressPercent}
+            />
           </div>
         ) : (
           <span className="text-xs text-slate-500">
